@@ -13,14 +13,14 @@ class ReactiveFollowGap : public rclcpp::Node {
 // This is just a template, you are free to implement your own node!
 
 public:
-    ReactiveFollowGap() : Node("reactive_node"), car_width(0.5)    
+    ReactiveFollowGap() : Node("reactive_node")   
     {
         /// TODO: create ROS subscribers and publishers
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
             lidarscan_topic, 1, std::bind(&ReactiveFollowGap::lidar_callback, this, std::placeholders::_1));
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
-        this->declare_parameter("r_b", 0.3);
+        this->declare_parameter("car_width", 0.5);
         this->declare_parameter("disp_thresh", 0.3);
     }
 
@@ -32,7 +32,8 @@ private:
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_pub_;
     float theta_min, theta_increment;
     float theta;
-    float car_width;
+    // float car_width;
+    int number_of_rays;
 
     float preprocess_lidar(const float* ranges)
     {   
@@ -40,26 +41,37 @@ private:
         // 1.Setting each value to the mean over some window
         // 2.Rejecting high values (eg. > 3m)
         
-        int range_size = sizeof(ranges)/sizeof(ranges[0]);
+        // int range_size = sizeof ranges/sizeof(ranges[0]);
         float gap_width = 0.0;
         bool gap_flag = true;
         bool obs_flag = true;
         int gap_start;
 
+        // printf("size of ranges: %d\n", number_of_rays);
+        // printf("theta_min: %f\n", theta_min);
+        // printf("theta_increment: %f\n", theta_increment);
 
-        for(int i=0; i<range_size; i++)
+        for(int i=1000; i>100; i--)
         {
-            if ((ranges[i+1] - ranges[i]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
+            // printf("-----------------------------------------------------------\n");
+            // printf("theta_min: %f\n", theta_min*180.0/M_PI);
+            // printf("i: %d\n", i);
+            // printf("ranges[i]: %f\n", ranges[i]);
+            // printf("ranges[i-1]: %f\n", ranges[i-1]);
+            // printf("-----------------------------------------------------------\n");
+            if ((ranges[i-1] - ranges[i]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
             {
                 // left disparity
-                gap_width += ranges[i+1] * theta_increment;
+                RCLCPP_INFO(this->get_logger(), "Left disparity, %f, %f :%f", (theta_min + (i-1)* theta_increment)*180.0/M_PI, (theta_min +  i* theta_increment)*180.0/M_PI, ranges[i-1] - ranges[i]);
+                gap_width += ranges[i] * theta_increment;
                 gap_flag = true;
                 obs_flag = false;
-                gap_start = i+1;
+                gap_start = i;
             }
-            else if ((ranges[i] - ranges[i + 1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())
+            else if ((ranges[i] - ranges[i-1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())
             {
                 // right disparity
+                RCLCPP_INFO(this->get_logger(), "Right disparity, %f, %f :%f", (theta_min + i* theta_increment)*180.0/M_PI, (theta_min + (i-1)* theta_increment)*180.0/M_PI, ranges[i] - ranges[i-1]);
                 gap_width = 0.0;
                 gap_flag = false;
                 obs_flag = true;
@@ -69,15 +81,16 @@ private:
                 // incrementing gap without disparity
                 gap_width += ranges[i] * theta_increment;
             }
-            if((gap_width > car_width) && (obs_flag == false))
+            if((gap_width > this->get_parameter("car_width").get_parameter_value().get<float>()) && (obs_flag == false))
             {
                 // gap detected
                 // go for it
-                return theta_min + (i - gap_start) * theta_increment/2.0;
+                RCLCPP_INFO(this->get_logger(), "Gap detected, %f, %f\n", (theta_min + gap_start*theta_increment)*180.0/M_PI, (theta_min + i*theta_increment)*180.0/M_PI);
+                RCLCPP_INFO(this->get_logger(), "Gap width: %f", gap_width);
+                return theta_min + (gap_start-i) * theta_increment/2.0;
             }
-
         }
-
+        RCLCPP_INFO(this->get_logger(), "No gap detected");
         return 0.0;
     }
 
@@ -102,9 +115,13 @@ private:
 
         theta_min = scan_msg->angle_min;
         theta_increment = scan_msg->angle_increment;
+        number_of_rays = scan_msg->ranges.size();
 
         const float *range_data = scan_msg->ranges.data();
         theta = preprocess_lidar(range_data);     // change function name
+
+        // RCLCPP_INFO(this->get_logger(), "theta: %f", theta);
+
         
     }
 
