@@ -30,9 +30,11 @@ private:
     /// TODO: create ROS subscribers and publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_pub_;
+    float theta_min, theta_increment;
+    float theta;
     float car_width;
 
-    float preprocess_lidar(float* ranges, float theta_min, float theta_max, float theta_increment)
+    float preprocess_lidar(const float* ranges)
     {   
         // Preprocess the LiDAR scan array. Expert implementation includes:
         // 1.Setting each value to the mean over some window
@@ -96,6 +98,13 @@ private:
         // Find the best point in the gap 
 
         // Publish Drive message
+
+
+        theta_min = scan_msg->angle_min;
+        theta_increment = scan_msg->angle_increment;
+
+        const float *range_data = scan_msg->ranges.data();
+        theta = preprocess_lidar(range_data);     // change function name
         
     }
 
