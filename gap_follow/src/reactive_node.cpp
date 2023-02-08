@@ -13,7 +13,7 @@ class ReactiveFollowGap : public rclcpp::Node {
 // This is just a template, you are free to implement your own node!
 
 public:
-    ReactiveFollowGap() : Node("reactive_node")
+    ReactiveFollowGap() : Node("reactive_node"), car_width(0.5)    
     {
         /// TODO: create ROS subscribers and publishers
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -21,6 +21,7 @@ public:
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
         this->declare_parameter("r_b", 0.3);
+        this->declare_parameter("disp_thresh", 0.3);
     }
 
 private:
@@ -29,53 +30,56 @@ private:
     /// TODO: create ROS subscribers and publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_pub_;
+    float car_width;
 
-    void preprocess_lidar(float* ranges, float theta_min, float theta_max, float theta_increment)
+    float preprocess_lidar(float* ranges, float theta_min, float theta_max, float theta_increment)
     {   
         // Preprocess the LiDAR scan array. Expert implementation includes:
         // 1.Setting each value to the mean over some window
         // 2.Rejecting high values (eg. > 3m)
         
         int range_size = sizeof(ranges)/sizeof(ranges[0]);
-        float min_element = *std::min_element(ranges, ranges + range_size);
+        float gap_width = 0.0;
+        bool gap_flag = true;
+        bool obs_flag = true;
+        int gap_start;
+
 
         for(int i=0; i<range_size; i++)
         {
-            // if (ranges[i] > 5.0)
-            //     ranges[i] = 5.0;
-            
-            if(ranges[i] == (min_element))
+            if ((ranges[i+1] - ranges[i]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
             {
-                float theta_ignore = asin(this->get_parameter("r_b").get_parameter_value().get<float>()/ranges[i]);
-                int ignore = theta_ignore/theta_increment;
-                int ignore_min = i - ignore<0 ? i-ignore : 0;
-                int ignore_max = i + ignore>range_size ? i+ignore : range_size-1;
-                
-                for(int j=ignore_min; j<ignore_max; j++)
-                    ranges[j] = 0.0;
+                // left disparity
+                gap_width += ranges[i+1] * theta_increment;
+                gap_flag = true;
+                obs_flag = false;
+                gap_start = i+1;
             }
+            else if ((ranges[i] - ranges[i + 1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())
+            {
+                // right disparity
+                gap_width = 0.0;
+                gap_flag = false;
+                obs_flag = true;
+            }
+            if (gap_flag)
+            {
+                // incrementing gap without disparity
+                gap_width += ranges[i] * theta_increment;
+            }
+            if((gap_width > car_width) && (obs_flag == false))
+            {
+                // gap detected
+                // go for it
+                return theta_min + (i - gap_start) * theta_increment/2.0;
+            }
+
         }
 
-        return;
+        return 0.0;
     }
 
-    void find_max_gap(float* ranges, int* indice)
-    {   
-        // Return the start index & end index of the max gap in free_space_ranges'
-        
-        
-
-
-        return;
-    }
-
-    void find_best_point(float* ranges, int* indice)
-    {   
-        // Start_i & end_i are start and end indicies of max-gap range, respectively
-        // Return index of best point in ranges
-	    // Naive: Choose the furthest point within ranges and go there
-        return;
-    }
+   
 
 
     void lidar_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg) 
@@ -92,6 +96,7 @@ private:
         // Find the best point in the gap 
 
         // Publish Drive message
+        
     }
 
 
