@@ -1,0 +1,8 @@
+/reactive_node:
+  ros__parameters:
+    Kp: 0.7
+    car_width: 0.7
+    disp_thresh: 0.1
+    obs_dist: 1.2
+    speed: 1.5
+    use_sim_time: false

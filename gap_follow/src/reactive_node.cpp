@@ -20,10 +20,11 @@ public:
             lidarscan_topic, 1, std::bind(&ReactiveFollowGap::lidar_callback, this, std::placeholders::_1));
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
-        this->declare_parameter("car_width", 0.5);
-        this->declare_parameter("disp_thresh", 0.3);
-        this->declare_parameter("Kp", 0.5);
-        this->declare_parameter("speed", 1.0);
+        this->declare_parameter("car_width", 0.7);
+        this->declare_parameter("disp_thresh", 0.1);
+        this->declare_parameter("Kp", 0.1);
+        this->declare_parameter("speed", 0.0);
+        this->declare_parameter("obs_dist", 1.5);
     }
 
 private:
@@ -52,6 +53,30 @@ private:
         // printf("size of ranges: %d\n", number_of_rays);
         // printf("theta_min: %f\n", theta_min);
         // printf("theta_increment: %f\n", theta_increment);
+        
+        // Straight logic
+        int max_gap = 0;
+        int start_gap = 0;
+        int end_gap = 0;
+        int gap = 0;
+        for(int i=0; i<number_of_rays; i++)
+        {
+            if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>())
+            {
+                // printf("OBSTACLE\n");
+                if(gap > max_gap)
+                {
+                    max_gap = gap;
+                    start_gap = (i - gap)+5;
+                    end_gap = i-5;
+                }
+                gap = 0;
+            }
+            else
+                gap++;
+        }
+        RCLCPP_INFO(this->get_logger(), "Max gap: %d, start: %f, end: %f", max_gap, (theta_min + start_gap* theta_increment)*180.0/M_PI, (theta_min +  end_gap* theta_increment)*180.0/M_PI);
+        return theta_min + (start_gap + end_gap) * theta_increment/2.0;
 
         for(int i=number_of_rays-5; i>5; i--)
         {   
@@ -87,10 +112,10 @@ private:
                         RCLCPP_INFO(this->get_logger(), "Gap detected, %f, %f\n", (theta_min + 1080*theta_increment)*180.0/M_PI, (theta_min + i*theta_increment)*180.0/M_PI);
                         return theta_min + (1080+i) * theta_increment/2.0;
                     }
+                }
                 gap_width = 0.0;
                 gap_flag = false;
                 obs_flag = true;
-                }
             }
             if (gap_flag)
             {
