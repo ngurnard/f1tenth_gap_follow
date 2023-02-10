@@ -19,8 +19,10 @@ public:
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
         // declare useful params
-        this->declare_parameter("car_width", 0.5);
-        this->declare_parameter("disp_thresh", 0.3);
+        this->declare_parameter("range_thresh", 1f);
+        this->declare_parameter("disp_thresh", 0.1);
+        this->declare_parameter("Kp", 0.7);
+        this->declare_parameter("speed", 1.5);
     }
 
 private:
@@ -33,8 +35,9 @@ private:
     // declare useful vals
     int number_of_rays;
     float theta_increment;
+    float theta_min;
 
-    // for disparity (REMEMBER TO CLEAR)
+    // for disparity (starting indices)
     std::vector<int> obs_idx;
     std::vector<int> gap_idx;
     std::vector<int> shawties; // short scans
@@ -47,6 +50,11 @@ private:
         // Preprocess the LiDAR scan array. Expert implementation includes:
         // 1.Setting each value to the mean over some window
         // 2.Rejecting high values (eg. > 3m)
+
+        // clear previous scan
+        obs_idx.clear();
+        gap_idx.clear();
+        shawties.clear();
 
         // sweep right to left
         for (int i = 1; i < number_of_rays; i++) {
@@ -135,7 +143,7 @@ private:
                 }
             gap = 0; // reset the gap
             } else {
-                gap += ranges[i] * this->theta_increment;
+                gap += ranges[i] * this->theta_increment; // s = r * theta
                 gap_iter++;
             }
         }
@@ -160,6 +168,7 @@ private:
         // need to store some params
         this->number_of_rays = scan_msg->ranges.size();
         this->theta_increment = scan_msg->angle_increment;
+        this->theta_min = scan_msg->angle_min;
         const float *range_data = scan_msg->ranges.data();
         int gap_start_idx;
         int gap_end_idx;
@@ -169,15 +178,15 @@ private:
         preprocess_lidar(range_data);
 
         // Find max length gap 
-        find_max_gap(range_data, gap_start_idx, gap_end_idx);
+        find_max_gap(range_data, &gap_start_idx, &gap_end_idx);
 
         // Find the best point in the gap 
-        find_best_point(range_data, gap_start_idx, gap_end_idx, best_idx);
+        find_best_point(range_data, &gap_start_idx, &gap_end_idx, &best_idx);
 
         // Publish Drive message
-        RCLCPP_INFO(this->get_logger(), "theta: %f", theta*180.0/M_PI);
+        // RCLCPP_INFO(this->get_logger(), "theta: %f", theta*180.0/M_PI);
         ackermann_msgs::msg::AckermannDriveStamped drive_msg;
-        drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * range_data(best_idx);
+        drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * (best_idx * theta_increment + theta_min);
         drive_msg.drive.speed = this->get_parameter("speed").get_parameter_value().get<float>();
         drive_pub_->publish(drive_msg);
     }
