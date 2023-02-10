@@ -11,7 +11,7 @@ class ReactiveFollowGap : public rclcpp::Node {
 // This is just a template, you are free to implement your own node!
 
 public:
-    ReactiveFollowGap() : Node("reactive_node"), lidarscan_topic("/scan"), drive_topic("/drive")
+    ReactiveFollowGap() : Node("max_gap_node"), lidarscan_topic("/scan"), drive_topic("/drive")
     {
         /// create ROS subscribers and publishers
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -19,7 +19,7 @@ public:
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
         // declare useful params
-        this->declare_parameter("range_thresh", 1f);
+        this->declare_parameter("range_thresh", 1.);
         this->declare_parameter("disp_thresh", 0.1);
         this->declare_parameter("Kp", 0.7);
         this->declare_parameter("speed", 1.5);
@@ -95,7 +95,7 @@ private:
             if (obs_idx.size() != 0 || gap_idx.size() != 0) {
                 if (obs_idx.back() > gap_idx.back()) {
                     // if in an obstacle (most recent scan idx is an obs)
-                    ranges[i] == 0;
+                    ranges[i] = 0;
                 } 
             }
         }
@@ -108,14 +108,14 @@ private:
             // d arc?
 
             // look above the max thresh for the gap (zero out short scans)
-            for (int i = shawties.start(); shawties.end(); i++) {
+            for (auto i : shawties) {
                 ranges[i] = 0;
             }
 
         } else {
             // check if the first flag is an obs, if so need more zero logic
             if (first_flag == 0) {
-                for (int i = obs_idx.start(); i < gap_idx.start(); i++) {
+                for (int i = obs_idx[0]; i < gap_idx[0]; i++) {
                     ranges[i] = 0;
                 }
             }
@@ -124,13 +124,13 @@ private:
         return;
     }
 
-    void find_max_gap(float* ranges, int* start_idx, int* end_idx)
+    void find_max_gap(const float* ranges, int* start_idx, int* end_idx)
     {    
         // Return the start index & end index of the max gap in free_space_ranges
         // Straight logic
-        float max_gap;
-        int gap_iter;
-        float gap;
+        float max_gap = 0.0;
+        int gap_iter = 0;
+        float gap = 0.0;
         for(int i = 0; i < number_of_rays; i++)
         {
             if (ranges[i] == 0) { // if an obs
@@ -138,8 +138,8 @@ private:
                 {
                     // logic for finding biggest gap
                     max_gap = gap;
-                    start_idx = i - gap_iter; 
-                    end_idx = i;
+                    *start_idx = i - gap_iter; 
+                    *end_idx = i;
                 }
             gap = 0; // reset the gap
             } else {
@@ -150,12 +150,12 @@ private:
         return;
     }
 
-    void find_best_point(float* ranges, int* start_idx, int* end_idx, int* best_idx)
+    void find_best_point(int* start_idx, int* end_idx, float* best_theta)
     {   
         // Start_i & end_i are start and end indicies of max-gap range, respectively
         // Return index of best point in ranges
 	    // Naive: Choose the furthest point within ranges and go there
-        best_idx = (start_idx + end_idx) / 2; // go to center
+        *best_theta = (*start_idx + *end_idx)*theta_increment/2.0 + theta_min; // go to center
 
         return;
     }
@@ -169,24 +169,26 @@ private:
         this->number_of_rays = scan_msg->ranges.size();
         this->theta_increment = scan_msg->angle_increment;
         this->theta_min = scan_msg->angle_min;
-        const float *range_data = scan_msg->ranges.data();
+        float const *range_data = scan_msg->ranges.data();
+        float *range_data_copy = new float[this->number_of_rays];
+        memcpy(range_data_copy, range_data, this->number_of_rays * sizeof(float));
         int gap_start_idx;
         int gap_end_idx;
-        int best_idx;
+        float best_theta;
 
         // process all of the lidar scans
-        preprocess_lidar(range_data);
+        preprocess_lidar(range_data_copy);
 
         // Find max length gap 
-        find_max_gap(range_data, &gap_start_idx, &gap_end_idx);
+        find_max_gap(range_data_copy, &gap_start_idx, &gap_end_idx);
 
         // Find the best point in the gap 
-        find_best_point(range_data, &gap_start_idx, &gap_end_idx, &best_idx);
+        find_best_point(&gap_start_idx, &gap_end_idx, &best_theta);
 
         // Publish Drive message
-        // RCLCPP_INFO(this->get_logger(), "theta: %f", theta*180.0/M_PI);
-        ackermann_msgs::msg::AckermannDriveStamped drive_msg;
-        drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * (best_idx * theta_increment + theta_min);
+        RCLCPP_INFO(this->get_logger(), "theta: %f", best_theta * 180.0/M_PI);
+        ackermann_msgs::msg::AckermannDriveStamped drive_msg; 
+        drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * best_theta;
         drive_msg.drive.speed = this->get_parameter("speed").get_parameter_value().get<float>();
         drive_pub_->publish(drive_msg);
     }
