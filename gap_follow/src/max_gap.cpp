@@ -11,23 +11,35 @@ class ReactiveFollowGap : public rclcpp::Node {
 // This is just a template, you are free to implement your own node!
 
 public:
-    ReactiveFollowGap() : Node("reactive_node")
+    ReactiveFollowGap() : Node("reactive_node"), lidarscan_topic("/scan"), drive_topic("/drive")
     {
-        /// TODO: create ROS subscribers and publishers
+        /// create ROS subscribers and publishers
+        scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+            lidarscan_topic, 1, std::bind(&ReactiveFollowGap::lidar_callback, this, std::placeholders::_1));
+        drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
+
+        // declare useful params
+        this->declare_parameter("car_width", 0.5);
+        this->declare_parameter("disp_thresh", 0.3);
     }
 
 private:
-    std::string lidarscan_topic = "/scan";
-    std::string drive_topic = "/drive";
-    /// TODO: create ROS subscribers and publishers
+    std::string lidarscan_topic;
+    std::string drive_topic;
+    /// create ROS subscribers and publishers
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
+    rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_pub_;
 
+    // declare useful vals
     int number_of_rays;
+    float theta_increment;
 
     // for disparity (REMEMBER TO CLEAR)
     std::vector<int> obs_idx;
     std::vector<int> gap_idx;
     std::vector<int> shawties; // short scans
 
+    // to check which disparity comes first
     bool first_flag; // 0 is obs, 1 is gap
 
     void preprocess_lidar(float* ranges)
@@ -104,18 +116,39 @@ private:
         return;
     }
 
-    void find_max_gap(float* ranges, int* idx)
-    {   
+    void find_max_gap(float* ranges, int* start_idx, int* end_idx)
+    {    
         // Return the start index & end index of the max gap in free_space_ranges
-
+        // Straight logic
+        float max_gap;
+        int gap_iter;
+        float gap;
+        for(int i = 0; i < number_of_rays; i++)
+        {
+            if (ranges[i] == 0) { // if an obs
+                if (gap > max_gap)
+                {
+                    // logic for finding biggest gap
+                    max_gap = gap;
+                    start_idx = i - gap_iter; 
+                    end_idx = i;
+                }
+            gap = 0; // reset the gap
+            } else {
+                gap += ranges[i] * this->theta_increment;
+                gap_iter++;
+            }
+        }
         return;
     }
 
-    void find_best_point(float* ranges, int* idx)
+    void find_best_point(float* ranges, int* start_idx, int* end_idx, int* best_idx)
     {   
         // Start_i & end_i are start and end indicies of max-gap range, respectively
         // Return index of best point in ranges
 	    // Naive: Choose the furthest point within ranges and go there
+        best_idx = (start_idx + end_idx) / 2; // go to center
+
         return;
     }
 
@@ -124,18 +157,29 @@ private:
     {   
         // Process each LiDAR scan as per the Follow Gap algorithm & publish an AckermannDriveStamped Message
 
-        number_of_rays = scan_msg->ranges.size();
+        // need to store some params
+        this->number_of_rays = scan_msg->ranges.size();
+        this->theta_increment = scan_msg->angle_increment;
+        const float *range_data = scan_msg->ranges.data();
+        int gap_start_idx;
+        int gap_end_idx;
+        int best_idx;
 
-        /// TODO:
-        // Find closest point to LiDAR
-
-        // Eliminate all points inside 'bubble' (set them to zero) 
+        // process all of the lidar scans
+        preprocess_lidar(range_data);
 
         // Find max length gap 
+        find_max_gap(range_data, gap_start_idx, gap_end_idx);
 
         // Find the best point in the gap 
+        find_best_point(range_data, gap_start_idx, gap_end_idx, best_idx);
 
         // Publish Drive message
+        RCLCPP_INFO(this->get_logger(), "theta: %f", theta*180.0/M_PI);
+        ackermann_msgs::msg::AckermannDriveStamped drive_msg;
+        drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * range_data(best_idx);
+        drive_msg.drive.speed = this->get_parameter("speed").get_parameter_value().get<float>();
+        drive_pub_->publish(drive_msg);
     }
 
 
