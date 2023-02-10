@@ -23,6 +23,7 @@ public:
         this->declare_parameter("car_width", 0.5);
         this->declare_parameter("disp_thresh", 0.3);
         this->declare_parameter("Kp", 0.5);
+        this->declare_parameter("speed", 1.0);
     }
 
 private:
@@ -140,7 +141,7 @@ private:
         ackermann_msgs::msg::AckermannDriveStamped drive_msg;
         // drive_msg.header.stamp = this->now();
         drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * theta;
-        drive_msg.drive.speed = 0.0;
+        drive_msg.drive.speed = this->get_parameter("speed").get_parameter_value().get<float>();
         drive_pub_->publish(drive_msg);
     }
 
