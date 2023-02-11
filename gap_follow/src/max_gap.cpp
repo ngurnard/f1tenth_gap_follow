@@ -20,9 +20,10 @@ public:
 
         // declare useful params
         this->declare_parameter("range_thresh", 1.);
-        this->declare_parameter("disp_thresh", 0.1);
-        this->declare_parameter("Kp", 0.7);
-        this->declare_parameter("speed", 1.5);
+        this->declare_parameter("disp_thresh", 0.5);
+        this->declare_parameter("Kp", 0.6);
+        this->declare_parameter("speed", 0.0);
+        this->declare_parameter("car_width", 0.5); // s for s=r*theta
     }
 
 private:
@@ -45,7 +46,7 @@ private:
     // to check which disparity comes first
     bool first_flag; // 0 is obs, 1 is gap
 
-    void preprocess_lidar(float* ranges)
+    void preprocess_lidar(const float* ranges_og, float* ranges)
     {   
         // Preprocess the LiDAR scan array. Expert implementation includes:
         // 1.Setting each value to the mean over some window
@@ -57,14 +58,19 @@ private:
         shawties.clear();
 
         // sweep right to left
-        for (int i = 1; i < number_of_rays; i++) {
+        int ignore_scans = ((-theta_min) - M_PI/2)/theta_increment;
+        std::cout << ignore_scans << std::endl;
+        for (int i = ignore_scans; i < number_of_rays-ignore_scans; i++)
+        {
             // store the short scans in case of no disparity
-            if (ranges[i] < this->get_parameter("range_thresh").get_parameter_value().get<float>()) {
+            if (ranges_og[i] < this->get_parameter("range_thresh").get_parameter_value().get<float>()) {
                 shawties.push_back(i);
             }
             // right disparity
-            if ((ranges[i] - ranges[i-1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
+            if ((ranges_og[i] - ranges_og[i-1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
             {
+                RCLCPP_INFO(this->get_logger(), "right disparity at %f", (theta_min+(i*theta_increment))*180.0/M_PI);
+                RCLCPP_INFO(this->get_logger(), "ranges_og[i]: %f,; ranges_og[i-1]: %f", ranges_og[i], ranges_og[i-1]);
                 if (obs_idx.size() == 0 && gap_idx.size() == 0) {
                     // if the first disparity is a right disparity, then start of obs is first scan
                     obs_idx.push_back(0);
@@ -77,8 +83,10 @@ private:
                 
             }
             // left disparity
-            if ((ranges[i-1] - ranges[i]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
+            else if ((ranges_og[i-1] - ranges_og[i]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
             {
+                RCLCPP_INFO(this->get_logger(), "left disparity at %f", (theta_min+(i*theta_increment))*180.0/M_PI);
+                RCLCPP_INFO(this->get_logger(), "ranges_og[i-1]: %f,; ranges_og[i]: %f", ranges_og[i-1], ranges_og[i]);
                 if (obs_idx.size() == 0 && gap_idx.size() == 0) {
                     // if the first disparity is a left disparity, then start of gap is first scan
                     gap_idx.push_back(0);
@@ -119,7 +127,6 @@ private:
                     ranges[i] = 0;
                 }
             }
-             
         }
         return;
     }
@@ -137,9 +144,11 @@ private:
                 if (gap > max_gap)
                 {
                     // logic for finding biggest gap
+                    RCLCPP_INFO(this->get_logger(), "New max gap");
                     max_gap = gap;
                     *start_idx = i - gap_iter; 
                     *end_idx = i;
+                    RCLCPP_INFO(this->get_logger(), "Start: %f; End: %f", (theta_min+(*start_idx*theta_increment))*180.0/M_PI, (theta_min+(*end_idx*theta_increment))*180.0/M_PI);
                 }
             gap = 0; // reset the gap
             } else {
@@ -150,13 +159,15 @@ private:
         return;
     }
 
-    void find_best_point(int* start_idx, int* end_idx, float* best_theta)
+    void find_best_point(const float* ranges, int* start_idx, int* end_idx, float* best_theta)
     {   
         // Start_i & end_i are start and end indicies of max-gap range, respectively
         // Return index of best point in ranges
 	    // Naive: Choose the furthest point within ranges and go there
-        *best_theta = (*start_idx + *end_idx)*theta_increment/2.0 + theta_min; // go to center
-
+        // *best_theta = (*start_idx + *end_idx)*theta_increment/2.0 + theta_min; // go to center
+        // s = r*theta
+        float theta = this->get_parameter("car_width").get_parameter_value().get<float>() / ranges[*end_idx];
+        *best_theta = theta_min + (*end_idx)*theta_increment - theta;
         return;
     }
 
@@ -169,21 +180,21 @@ private:
         this->number_of_rays = scan_msg->ranges.size();
         this->theta_increment = scan_msg->angle_increment;
         this->theta_min = scan_msg->angle_min;
-        float const *range_data = scan_msg->ranges.data();
-        float *range_data_copy = new float[this->number_of_rays];
-        memcpy(range_data_copy, range_data, this->number_of_rays * sizeof(float));
+        float const *ranges_data = scan_msg->ranges.data();
+        float *ranges_data_copy = new float[this->number_of_rays];
+        memcpy(ranges_data_copy, ranges_data, this->number_of_rays * sizeof(float));
         int gap_start_idx;
         int gap_end_idx;
         float best_theta;
 
         // process all of the lidar scans
-        preprocess_lidar(range_data_copy);
+        preprocess_lidar(ranges_data, ranges_data_copy);
 
         // Find max length gap 
-        find_max_gap(range_data_copy, &gap_start_idx, &gap_end_idx);
+        find_max_gap(ranges_data_copy, &gap_start_idx, &gap_end_idx);
 
         // Find the best point in the gap 
-        find_best_point(&gap_start_idx, &gap_end_idx, &best_theta);
+        find_best_point(ranges_data, &gap_start_idx, &gap_end_idx, &best_theta);
 
         // Publish Drive message
         RCLCPP_INFO(this->get_logger(), "theta: %f", best_theta * 180.0/M_PI);
