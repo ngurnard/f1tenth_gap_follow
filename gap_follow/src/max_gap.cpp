@@ -62,6 +62,7 @@ private:
         std::cout << ignore_scans << std::endl;
         for (int i = ignore_scans; i < number_of_rays-ignore_scans; i++)
         {
+            // TODO: Filter NaN and infs
             // store the short scans in case of no disparity
             if (ranges_og[i] < this->get_parameter("range_thresh").get_parameter_value().get<float>()) {
                 shawties.push_back(i);
