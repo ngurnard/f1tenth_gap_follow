@@ -63,10 +63,17 @@ private:
         for (int i = ignore_scans; i < number_of_rays-ignore_scans; i++)
         {
             // TODO: Filter NaN and infs
+            if (std::isinf(ranges_og[i]) || std::isinf(ranges_og[i-1])
+                || std::isnan(ranges_og[i]) || std::isnan(ranges_og[i-1]))
+            {
+                    continue; 
+            }
             // store the short scans in case of no disparity
             if (ranges_og[i] < this->get_parameter("range_thresh").get_parameter_value().get<float>()) {
                 shawties.push_back(i);
             }
+    
+
             // right disparity
             if ((ranges_og[i] - ranges_og[i-1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
             {
@@ -139,7 +146,8 @@ private:
         float max_gap = 0.0;
         int gap_iter = 0;
         float gap = 0.0;
-        for(int i = 0; i < number_of_rays; i++)
+        int ignore_scans = ((-theta_min) - M_PI/2)/theta_increment;
+        for (int i = ignore_scans; i < number_of_rays-ignore_scans; i++)
         {
             if (ranges[i] == 0) { // if an obs
                 if (gap > max_gap)
@@ -181,6 +189,8 @@ private:
         this->number_of_rays = scan_msg->ranges.size();
         this->theta_increment = scan_msg->angle_increment;
         this->theta_min = scan_msg->angle_min;
+        // this->ranges_min = scan_msg->range_min;
+        // this->ranges_max = scan_msg->range_max;
         float const *ranges_data = scan_msg->ranges.data();
         float *ranges_data_copy = new float[this->number_of_rays];
         memcpy(ranges_data_copy, ranges_data, this->number_of_rays * sizeof(float));
