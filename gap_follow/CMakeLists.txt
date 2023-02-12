@@ -32,10 +32,15 @@ include_directories(include)
 # Create Cpp executable
 add_executable(reactive_node src/reactive_node.cpp)
 add_executable(max_gap_node src/max_gap.cpp)
+add_executable(obstacle_node src/max_gap_obstacle.cpp)
+
 ament_target_dependencies(reactive_node 
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 ament_target_dependencies(max_gap_node 
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+ament_target_dependencies(obstacle_node 
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 
@@ -43,6 +48,7 @@ ament_target_dependencies(max_gap_node
 install(TARGETS
   reactive_node
   max_gap_node
+  obstacle_node
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules
