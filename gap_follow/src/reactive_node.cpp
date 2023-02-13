@@ -24,7 +24,7 @@ public:
         this->declare_parameter("disp_thresh", 0.1);
         this->declare_parameter("Kp", 0.71);
         this->declare_parameter("speed_turn", 0.5);
-        this->declare_parameter("speed_straight", 1.55);
+        this->declare_parameter("speed_straight", 1.5);
         this->declare_parameter("obs_dist", 1.2);
     }
 
