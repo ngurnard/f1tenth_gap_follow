@@ -20,10 +20,12 @@ public:
             lidarscan_topic, 1, std::bind(&ReactiveFollowGap::lidar_callback, this, std::placeholders::_1));
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
-        this->declare_parameter("car_width", 0.5);
-        this->declare_parameter("disp_thresh", 0.3);
-        this->declare_parameter("Kp", 0.5);
-        this->declare_parameter("speed", 1.0);
+        this->declare_parameter("car_width", 0.7);
+        this->declare_parameter("disp_thresh", 0.1);
+        this->declare_parameter("Kp", 0.71);
+        this->declare_parameter("speed_turn", 0.5);
+        this->declare_parameter("speed_straight", 1.5);
+        this->declare_parameter("obs_dist", 1.2);
     }
 
 private:
@@ -42,72 +44,63 @@ private:
         // Preprocess the LiDAR scan array. Expert implementation includes:
         // 1.Setting each value to the mean over some window
         // 2.Rejecting high values (eg. > 3m)
-        
-        // int range_size = sizeof ranges/sizeof(ranges[0]);
-        float gap_width = 0.0;
-        bool gap_flag = true;
-        bool obs_flag = true;
-        int gap_start;
+     
+        // Straight logic
+        int max_gap = 0;
+        int start_gap = 0;
+        int end_gap = 0;
+        int gap = 0;
+        // for(int i=0; i<number_of_rays; i++)
+        // {
+        //     if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>())
+        //     {
+        //         // printf("OBSTACLE\n");
+        //         if(gap > max_gap)
+        //         {
+        //             max_gap = gap;
+        //             start_gap = (i - gap);
+        //             end_gap = i;
+        //         }
+        //         gap = 0;
+        //     }
+        //     else
+        //         gap++;
+        // }
 
-        // printf("size of ranges: %d\n", number_of_rays);
-        // printf("theta_min: %f\n", theta_min);
-        // printf("theta_increment: %f\n", theta_increment);
-
-        for(int i=number_of_rays-5; i>5; i--)
-        {   
-            if(ranges[i] > 2.0 || ranges[i-1]>2.0)
-                continue;
-            // printf("-----------------------------------------------------------\n");
-            // printf("theta_min: %f\n", theta_min*180.0/M_PI);
-            // printf("i: %d\n", i);
-            // printf("ranges[i]: %f\n", ranges[i]);
-            // printf("ranges[i-1]: %f\n", ranges[i-1]);
-            // printf("-----------------------------------------------------------\n");
-            if ((ranges[i-1] - ranges[i]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())  
+        int ignore_scans = ((-theta_min) - M_PI/2)/theta_increment;
+        float max_gap_depth = 0.0;
+        // for(int i=ignore_scans; i<number_of_rays-ignore_scans; i++)
+        for(int i=0; i<number_of_rays; i++)
+        {
+            if (std::isinf(ranges[i])
+                || std::isnan(ranges[i]))
             {
-                // left disparity
-                RCLCPP_INFO(this->get_logger(), "Left disparity, %f, %f :%f", (theta_min + (i-1)* theta_increment)*180.0/M_PI, (theta_min +  i* theta_increment)*180.0/M_PI, ranges[i-1] - ranges[i]);
-                gap_width += ranges[i] * theta_increment;
-                gap_flag = true;
-                obs_flag = false;
-                gap_start = i;
+                    continue; 
             }
-            else if ((ranges[i] - ranges[i-1]) > this->get_parameter("disp_thresh").get_parameter_value().get<float>())
-            {
-                // right disparity
-                RCLCPP_INFO(this->get_logger(), "Right disparity, %f, %f :%f", (theta_min + i* theta_increment)*180.0/M_PI, (theta_min + (i-1)* theta_increment)*180.0/M_PI, ranges[i] - ranges[i-1]);
-                if(gap_flag==true && obs_flag==true)
+
+            if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>())
+            {   
+                // it is an obstacle
+                if(gap > max_gap)
                 {
-                    // First right disparity detected
-                    if((gap_width > this->get_parameter("car_width").get_parameter_value().get<float>()))
-                    {
-                        // gap detected
-                        // go for it
-                        RCLCPP_INFO(this->get_logger(), "Gap width: %f", gap_width);
-                        RCLCPP_INFO(this->get_logger(), "Gap detected, %f, %f\n", (theta_min + 1080*theta_increment)*180.0/M_PI, (theta_min + i*theta_increment)*180.0/M_PI);
-                        return theta_min + (1080+i) * theta_increment/2.0;
+                    for (int k = i-gap; k < i; k++) {
+                        if (ranges[k] > max_gap_depth) {
+                            max_gap_depth = ranges[k];
+                            max_gap = gap;
+                            start_gap = (i - gap) ;
+                            end_gap = i-1;
+                        }
                     }
-                gap_width = 0.0;
-                gap_flag = false;
-                obs_flag = true;
+                    gap = 0;
                 }
             }
-            if (gap_flag)
-            {
-                // incrementing gap without disparity
-                gap_width += ranges[i] * theta_increment;
-            }
-            if((gap_width > this->get_parameter("car_width").get_parameter_value().get<float>()) && (obs_flag == false))
-            {
-                // gap detected
-                // go for it
-                RCLCPP_INFO(this->get_logger(), "Gap detected, %f, %f\n", (theta_min + gap_start*theta_increment)*180.0/M_PI, (theta_min + i*theta_increment)*180.0/M_PI);
-                RCLCPP_INFO(this->get_logger(), "Gap width: %f", gap_width);
-                return theta_min + (gap_start+i) * theta_increment/2.0;
-            }
+            else
+                gap++;
         }
-        // RCLCPP_INFO(this->get_logger(), "No gap detected");
-        return 0.0;
+        
+        RCLCPP_INFO(this->get_logger(), "Max gap: %d, start: %f, end: %f", max_gap, (theta_min + start_gap* theta_increment)*180.0/M_PI, (theta_min +  end_gap* theta_increment)*180.0/M_PI);
+        return theta_min + (start_gap + end_gap) * theta_increment/2.0;
+    
     }
 
    
@@ -141,7 +134,11 @@ private:
         ackermann_msgs::msg::AckermannDriveStamped drive_msg;
         // drive_msg.header.stamp = this->now();
         drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * theta;
-        drive_msg.drive.speed = this->get_parameter("speed").get_parameter_value().get<float>();
+        // if(theta*180.0/M_PI > 20.0)
+        //     drive_msg.drive.speed = this->get_parameter("speed_turn").get_parameter_value().get<float>();
+        // else
+        //     drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
+        drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
         drive_pub_->publish(drive_msg);
     }
 
