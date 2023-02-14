@@ -36,7 +36,7 @@ private:
     /// TODO: create ROS subscribers and publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_pub_;
-    float theta_min, theta_increment;
+    float theta_min, theta_increment, ranges_min, ranges_max;
     float theta;
     // float car_width;
     int number_of_rays;
@@ -48,10 +48,10 @@ private:
         // 2.Rejecting high values (eg. > 3m)
      
         // Straight logic
-        int max_gap = 0;
-        int start_gap = 0;
-        int end_gap = 0;
-        int gap = 0;
+        // int max_gap = 0;
+        // int start_gap = 0;
+        // int end_gap = 0;
+        // int gap = 0;
 
         // float debug_max_ranges = 0.0;
 
@@ -83,31 +83,37 @@ private:
 
         // RCLCPP_INFO(this->get_logger(), "Max range: %f", debug_max_ranges);
 
+        int max_gap = 0;
+        int start_gap = 0;
+        int end_gap = 0;
+        int gap = 0;
         float max_gap_depth = 0.0;
+
         for(int i=0; i<number_of_rays; i++)
         {
             if (std::isinf(ranges[i])
+                || ranges[i] > ranges_max
                 || std::isnan(ranges[i]))
             {
+                    gap++;
                     continue; 
             }
 
             if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>()
-                || ranges[i] > this->get_parameter("reflective_thresh").get_parameter_value().get<float>())
+                || ranges[i] > this->get_parameter("reflective_thresh").get_parameter_value().get<float>()
+                || ranges[i] < ranges_min)
             {   
                 // it is an obstacle
                 if(gap > max_gap)
                 {
-                    for (int k = i-gap; k < i; k++) {
-                        if (ranges[k] > max_gap_depth) {
-                            max_gap_depth = ranges[k];
-                            max_gap = gap;
-                            start_gap = (i - gap) ;
-                            end_gap = i-1;
-                        }
-                    }
-                    gap = 0;
+                    // for (int k = i-gap; k < i; k++) {
+                    //     if (ranges[k] > max_gap_depth) {
+                    //         max_gap_depth = ranges[k];
+                    max_gap = gap;
+                    start_gap = (i - gap) ;
+                    end_gap = i-1;
                 }
+                gap = 0;
             }
             else
                 gap++;
@@ -141,6 +147,8 @@ private:
 
         theta_min = scan_msg->angle_min;
         theta_increment = scan_msg->angle_increment;
+        ranges_min = scan_msg->range_min;
+        ranges_max = scan_msg->range_max;
         number_of_rays = scan_msg->ranges.size();
 
         const float *range_data = scan_msg->ranges.data();
