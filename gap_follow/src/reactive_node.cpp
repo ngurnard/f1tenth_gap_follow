@@ -22,11 +22,12 @@ public:
 
         // this->declare_parameter("car_width", 0.7);
         // this->declare_parameter("disp_thresh", 0.1);
-        this->declare_parameter("Kp", 0.71);
+        this->declare_parameter("Kp", 0.75);
         this->declare_parameter("speed_turn", 1.5);
         this->declare_parameter("speed_straight", 3.0);
         this->declare_parameter("obs_dist", 1.2);
         this->declare_parameter("reflective_thresh", 30.0);
+        this->declare_parameter("turn_thresh", 10.0);
     }
 
 private:
@@ -112,7 +113,7 @@ private:
                 gap++;
         }
 
-        RCLCPP_INFO(this->get_logger(), "Max gap is: %f", max_gap_depth);
+        RCLCPP_INFO(this->get_logger(), "Max gap depth is: %f", max_gap_depth);
         
         RCLCPP_INFO(this->get_logger(), "Max gap: %d, start: %f, end: %f", max_gap, (theta_min + start_gap* theta_increment)*180.0/M_PI, (theta_min +  end_gap* theta_increment)*180.0/M_PI);
         return theta_min + (start_gap + end_gap) * theta_increment/2.0;
@@ -150,7 +151,7 @@ private:
         ackermann_msgs::msg::AckermannDriveStamped drive_msg;
         // drive_msg.header.stamp = this->now();
         drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * theta;
-        if(theta*180.0/M_PI > 20.0)
+        if(theta*180.0/M_PI > this->get_parameter("turn_thresh").get_parameter_value().get<float>())
             drive_msg.drive.speed = this->get_parameter("speed_turn").get_parameter_value().get<float>();
         else
             drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
