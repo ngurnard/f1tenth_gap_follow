@@ -1,0 +1,9 @@
+/reactive_node:
+  ros__parameters:
+    Kp: 0.75
+    obs_dist: 2.5
+    reflective_thresh: 30.0
+    speed_straight: 4.0
+    speed_turn: 2.0
+    turn_thresh: 10.0
+    use_sim_time: false
