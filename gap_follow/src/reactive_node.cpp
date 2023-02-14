@@ -111,6 +111,8 @@ private:
             else
                 gap++;
         }
+
+        RCLCPP_INFO(this->get_logger(), "Max gap is: %f", max_gap_depth);
         
         RCLCPP_INFO(this->get_logger(), "Max gap: %d, start: %f, end: %f", max_gap, (theta_min + start_gap* theta_increment)*180.0/M_PI, (theta_min +  end_gap* theta_increment)*180.0/M_PI);
         return theta_min + (start_gap + end_gap) * theta_increment/2.0;
