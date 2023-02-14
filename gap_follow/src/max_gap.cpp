@@ -19,14 +19,15 @@ public:
         drive_pub_ = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 10);
 
         // declare useful params
-        this->declare_parameter("range_thresh", 1.);
+        this->declare_parameter("range_thresh", 1.2);
         this->declare_parameter("disp_thresh", 0.5);
-        this->declare_parameter("Kp", 0.6);
-        this->declare_parameter("turn_thresh", 5.0);
-        this->declare_parameter("speed_turn", 4.0);
-        this->declare_parameter("speed_straight", 5.0);
-        this->declare_parameter("speed", 0.0);
+        this->declare_parameter("Kp", 0.4);
+        this->declare_parameter("turn_thresh", 10.0);
+        this->declare_parameter("speed_turn", 1.0);
+        this->declare_parameter("speed_straight", 2.0);
         this->declare_parameter("car_width", 0.5); // s for s=r*theta
+        // REMOVE LATER
+        this->declare_parameter("theta_flag", 1); // 1 for center gap; 2 for left + car_wdith
     }
 
 private:
@@ -67,7 +68,9 @@ private:
         {
             // TODO: Filter NaN and infs
             if (std::isinf(ranges_og[i]) || std::isinf(ranges_og[i-1])
-                || std::isnan(ranges_og[i]) || std::isnan(ranges_og[i-1]))
+                || std::isnan(ranges_og[i]) || std::isnan(ranges_og[i-1])
+                || (ranges_og[i-1] > 5.0 && ranges_og[i] > 5.0)
+                || ranges_og[i-1] > 10.0 || ranges_og[i] > 10.0)
             {
                     continue; 
             }
@@ -100,15 +103,56 @@ private:
                 RCLCPP_INFO(this->get_logger(), "ranges_og[i-1]: %f,; ranges_og[i]: %f", ranges_og[i-1], ranges_og[i]);
                 if (obs_idx.size() == 0 && gap_idx.size() == 0) {
                     // if the first disparity is a left disparity, then start of gap is first scan
-                    gap_idx.push_back(0);
-                    obs_idx.push_back(i);
 
-                    first_flag = 1; // 1 is gap
+                    // gap_idx.push_back(0);
+
+                    // this is where the left disp is in radians
+                    // obs_idx.push_back(i);
+                    int k = i-1;
+                    while(true) {
+                        float arc = (theta_min+(i*theta_increment)) * ranges_og[i] - 
+                                    (theta_min+(k*theta_increment)) * ranges_og[i]; 
+                        if(arc > this->get_parameter("car_width").get_parameter_value().get<float>()) {
+                            RCLCPP_INFO(this->get_logger(), "Car width gap start: %f (FOR DEBUG)", (theta_min+(k*theta_increment))*180.0/M_PI);
+                            gap_idx.push_back(k);
+                            obs_idx.push_back(ignore_scans);
+                            obs_idx.push_back(i);
+                            first_flag = 0;
+                            break;
+                        } else {
+                            k--;
+                        }
+                        if(k < ignore_scans)
+                        {
+                            gap_idx.push_back(ignore_scans);
+                            first_flag = 1;
+                            obs_idx.push_back(i);
+                            break;
+                        }
+
+                    }
+                    // obs_idx.push_back(i);
+
+                    // first_flag = 0; // 1 is gap
                 } else {
                     // start of obs
                     obs_idx.push_back(i);
                 }
             }
+            // {
+            //     RCLCPP_INFO(this->get_logger(), "left disparity at %f", (theta_min+(i*theta_increment))*180.0/M_PI);
+            //     RCLCPP_INFO(this->get_logger(), "ranges_og[i-1]: %f,; ranges_og[i]: %f", ranges_og[i-1], ranges_og[i]);
+            //     if (obs_idx.size() == 0 && gap_idx.size() == 0) {
+            //         // if the first disparity is a left disparity, then start of gap is first scan
+            //         gap_idx.push_back(0);
+            //         obs_idx.push_back(i);
+
+            //         first_flag = 1; // 1 is gap
+            //     } else {
+            //         // start of obs
+            //         obs_idx.push_back(i);
+            //     }
+            // }
 
             // zero logic
             if (obs_idx.size() != 0 || gap_idx.size() != 0) {
@@ -121,10 +165,6 @@ private:
 
         // no disparity
         if (obs_idx.size() == 0 && gap_idx.size() == 0) {
-            // implement wall follow later potentially ( i think this would be best)
-            
-            // biggest arclength?
-            // d arc?
 
             // look above the max thresh for the gap (zero out short scans)
             for (auto i : shawties) {
@@ -179,8 +219,18 @@ private:
 	    // Naive: Choose the furthest point within ranges and go there
         // *best_theta = (*start_idx + *end_idx)*theta_increment/2.0 + theta_min; // go to center
         // s = r*theta
-        float theta = this->get_parameter("car_width").get_parameter_value().get<float>() / ranges[*end_idx];
-        *best_theta = theta_min + (*end_idx)*theta_increment - theta;
+        // float theta = this->get_parameter("car_width").get_parameter_value().get<float>() / ranges[*end_idx];
+        // *best_theta = theta_min + (*end_idx)*theta_increment - theta;
+
+        if(this->get_parameter("theta_flag").get_parameter_value().get<int>() == 1)
+            *best_theta = (*start_idx + *end_idx)*theta_increment/2.0 + theta_min; // go to center
+        else if(this->get_parameter("theta_flag").get_parameter_value().get<int>() == 2)
+        {
+            float theta = this->get_parameter("car_width").get_parameter_value().get<float>() / ranges[*end_idx];
+            *best_theta = theta_min + (*end_idx)*theta_increment - theta;
+        }
+
+
         return;
     }
 
