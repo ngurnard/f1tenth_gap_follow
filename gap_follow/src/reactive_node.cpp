@@ -26,6 +26,7 @@ public:
         this->declare_parameter("speed_turn", 1.5);
         this->declare_parameter("speed_straight", 3.0);
         this->declare_parameter("obs_dist", 1.2);
+        this->declare_parameter("reflective_thresh", 30.0);
     }
 
 private:
@@ -51,40 +52,8 @@ private:
         int end_gap = 0;
         int gap = 0;
 
-        float debug_max_ranges = 0.0;
+        // float debug_max_ranges = 0.0;
 
-        for(int i=0; i<number_of_rays; i++)
-        {
-            if (0
-                || std::isinf(ranges[i])
-                || std::isnan(ranges[i]))
-            {
-                    continue; 
-            }
-            if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>())
-            {
-                // printf("OBSTACLE\n");
-                if(gap > max_gap)
-                {
-                    max_gap = gap;
-                    start_gap = (i - gap);
-                    end_gap = i;
-                }
-                gap = 0;
-            }
-            else
-                gap++;
-            
-            // DEBUG CODE TO REMOVE
-            if(ranges[i] > debug_max_ranges)
-                debug_max_ranges = ranges[i];
-        }
-
-        RCLCPP_INFO(this->get_logger(), "Max range: %f", debug_max_ranges);
-
-        // int ignore_scans = ((-theta_min) - M_PI/2)/theta_increment;
-        // float max_gap_depth = 0.0;
-        // for(int i=ignore_scans; i<number_of_rays-ignore_scans; i++)
         // for(int i=0; i<number_of_rays; i++)
         // {
         //     if (std::isinf(ranges[i])
@@ -92,26 +61,56 @@ private:
         //     {
         //             continue; 
         //     }
-
         //     if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>())
-        //     {   
-        //         // it is an obstacle
+        //     {
+        //         // printf("OBSTACLE\n");
         //         if(gap > max_gap)
         //         {
-        //             for (int k = i-gap; k < i; k++) {
-        //                 if (ranges[k] > max_gap_depth) {
-        //                     max_gap_depth = ranges[k];
-        //                     max_gap = gap;
-        //                     start_gap = (i - gap) ;
-        //                     end_gap = i-1;
-        //                 }
-        //             }
-        //             gap = 0;
+        //             max_gap = gap;
+        //             start_gap = (i - gap);
+        //             end_gap = i;
         //         }
+        //         gap = 0;
         //     }
         //     else
         //         gap++;
+            
+        //     // DEBUG CODE TO REMOVE
+        //     if(ranges[i] > debug_max_ranges)
+        //         debug_max_ranges = ranges[i];
         // }
+
+        // RCLCPP_INFO(this->get_logger(), "Max range: %f", debug_max_ranges);
+
+        float max_gap_depth = 0.0;
+        for(int i=0; i<number_of_rays; i++)
+        {
+            if (std::isinf(ranges[i])
+                || std::isnan(ranges[i]))
+            {
+                    continue; 
+            }
+
+            if(ranges[i] < this->get_parameter("obs_dist").get_parameter_value().get<float>()
+                || ranges[i] > this->get_parameter("reflective_thresh").get_parameter_value().get<float>())
+            {   
+                // it is an obstacle
+                if(gap > max_gap)
+                {
+                    for (int k = i-gap; k < i; k++) {
+                        if (ranges[k] > max_gap_depth) {
+                            max_gap_depth = ranges[k];
+                            max_gap = gap;
+                            start_gap = (i - gap) ;
+                            end_gap = i-1;
+                        }
+                    }
+                    gap = 0;
+                }
+            }
+            else
+                gap++;
+        }
         
         RCLCPP_INFO(this->get_logger(), "Max gap: %d, start: %f, end: %f", max_gap, (theta_min + start_gap* theta_increment)*180.0/M_PI, (theta_min +  end_gap* theta_increment)*180.0/M_PI);
         return theta_min + (start_gap + end_gap) * theta_increment/2.0;
@@ -149,7 +148,7 @@ private:
         ackermann_msgs::msg::AckermannDriveStamped drive_msg;
         // drive_msg.header.stamp = this->now();
         drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * theta;
-        if(theta*180.0/M_PI > 10.0)
+        if(theta*180.0/M_PI > 20.0)
             drive_msg.drive.speed = this->get_parameter("speed_turn").get_parameter_value().get<float>();
         else
             drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
