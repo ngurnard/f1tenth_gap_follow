@@ -13,7 +13,7 @@ class ReactiveFollowGap : public rclcpp::Node {
 // This is just a template, you are free to implement your own node!
 
 public:
-    ReactiveFollowGap() : Node("reactive_node")   
+    ReactiveFollowGap() : Node("reactive_node_theta")   
     {
         /// TODO: create ROS subscribers and publishers
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -23,8 +23,8 @@ public:
         // this->declare_parameter("car_width", 0.7);
         // this->declare_parameter("disp_thresh", 0.1);
         this->declare_parameter("Kp", 0.75);
-        this->declare_parameter("speed_turn", 2.0);
-        this->declare_parameter("speed_straight", 4.0);
+        this->declare_parameter("v_turn", 2.0);
+        this->declare_parameter("v_str", 4.0);
         this->declare_parameter("obs_dist", 2.5);
         this->declare_parameter("reflective_thresh", 30.0);
         this->declare_parameter("turn_thresh", 10.0);
@@ -127,9 +127,6 @@ private:
     
     }
 
-   
-
-
     void lidar_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg) 
     {   
         // Process each LiDAR scan as per the Follow Gap algorithm & publish an AckermannDriveStamped Message
@@ -161,23 +158,24 @@ private:
         // drive_msg.header.stamp = this->now();
         drive_msg.drive.steering_angle = this->get_parameter("Kp").get_parameter_value().get<float>() * theta;
         // if(theta*180.0/M_PI > this->get_parameter("turn_thresh").get_parameter_value().get<float>())
-        //     drive_msg.drive.speed = this->get_parameter("speed_turn").get_parameter_value().get<float>();
+        //     drive_msg.drive.speed = this->get_parameter("v_turn").get_parameter_value().get<float>();
         // else
-        //     drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
+        //     drive_msg.drive.speed = this->get_parameter("v_str").get_parameter_value().get<float>();
         float input_start = 5.0;
         float input_end   = 15.0;
         if(abs(theta)*180.0/M_PI < input_start)
-            drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
+            drive_msg.drive.speed = this->get_parameter("v_str").get_parameter_value().get<float>();
         else if(abs(theta)*180.0*M_PI > input_end)
-            drive_msg.drive.speed = this->get_parameter("speed_turn").get_parameter_value().get<float>();
+            drive_msg.drive.speed = this->get_parameter("v_turn").get_parameter_value().get<float>();
         else
         {
+            // linear range mapping
             drive_msg.drive.speed = ((abs(theta)*180.0*M_PI - input_start)/(input_end - input_start))*
-            (this->get_parameter("speed_turn").get_parameter_value().get<float>() - this->get_parameter("speed_staright").get_parameter_value().get<float>()) + 
-            this->get_parameter("speed_straight").get_parameter_value().get<float>();
+            (this->get_parameter("v_turn").get_parameter_value().get<float>() - this->get_parameter("v_str").get_parameter_value().get<float>()) + 
+            this->get_parameter("v_str").get_parameter_value().get<float>();
         }
 
-        // drive_msg.drive.speed = this->get_parameter("speed_straight").get_parameter_value().get<float>();
+        // drive_msg.drive.speed = this->get_parameter("v_str").get_parameter_value().get<float>();
         drive_pub_->publish(drive_msg);
     }
 
