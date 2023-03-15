@@ -51,7 +51,7 @@ private:
         int start_gap = 0;
         int end_gap = 0;
         int gap = 0;
-        float max_gap_depth = 0.0;
+        //float max_gap_depth = 0.0;
 
         for(int i=0; i<number_of_rays; i++)
         {

@@ -195,7 +195,7 @@ private:
         return;
     }
 
-    void find_best_point(const float* ranges, int* start_idx, int* end_idx, float* best_theta)
+    void find_best_point(int* start_idx, int* end_idx, float* best_theta)
     {   
         // Start_i & end_i are start and end indicies of max-gap range, respectively
         // Return index of best point in ranges
@@ -235,7 +235,7 @@ private:
         find_max_gap(ranges_data_copy, &gap_start_idx, &gap_end_idx);
 
         // Find the best point in the gap 
-        find_best_point(ranges_data, &gap_start_idx, &gap_end_idx, &best_theta);
+        find_best_point(&gap_start_idx, &gap_end_idx, &best_theta);
 
         // Publish Drive message
         RCLCPP_INFO(this->get_logger(), "theta: %f", best_theta * 180.0/M_PI);
