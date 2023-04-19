@@ -22,7 +22,7 @@ public:
 
         // this->declare_parameter("car_width", 0.7);
         // this->declare_parameter("disp_thresh", 0.1);
-        this->declare_parameter("Kp", 0.75);
+        this->declare_parameter("Kp", 0.5);
         this->declare_parameter("v_turn", 2.0);
         this->declare_parameter("v_str", 4.0);
         this->declare_parameter("obs_dist", 2.5);
@@ -31,8 +31,8 @@ public:
     }
 
 private:
-    std::string lidarscan_topic = "/scan";
-    std::string drive_topic = "/drive";
+    std::string lidarscan_topic = "/opp_scan";
+    std::string drive_topic = "/opp_drive";
     /// TODO: create ROS subscribers and publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_pub_;
