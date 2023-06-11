@@ -30,14 +30,33 @@ endforeach()
 include_directories(include)
 
 # Create Cpp executable
-add_executable(reactive_node src/reactive_node.cpp)
-ament_target_dependencies(reactive_node 
+add_executable(reactive_node_theta src/reactive_node_theta.cpp)
+add_executable(max_gap_node src/max_gap.cpp)
+add_executable(obstacle_node src/max_gap_obstacle.cpp)
+add_executable(reactive_node_dist src/reactive_node_dist.cpp)
+
+
+ament_target_dependencies(reactive_node_theta
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+
+ament_target_dependencies(reactive_node_dist
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+
+ament_target_dependencies(max_gap_node 
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+ament_target_dependencies(obstacle_node 
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 
 # Install Cpp executables
 install(TARGETS
-  reactive_node
+  reactive_node_theta
+  reactive_node_dist
+  max_gap_node
+  obstacle_node
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules

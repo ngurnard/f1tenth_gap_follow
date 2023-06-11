@@ -1,0 +1,9 @@
+/reactive_node_dist:
+  ros__parameters:
+    Kp: 0.65
+    long: 7.5
+    obs_dist: 2.8
+    short: 1.7
+    use_sim_time: false
+    v_str: 6.3
+    v_turn: 1.5
